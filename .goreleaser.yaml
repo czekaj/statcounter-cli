@@ -1,0 +1,64 @@
+# GoReleaser configuration. Tag a release (e.g. `git tag v0.1.0 && git push --tags`)
+# and the release workflow builds binaries and updates the Homebrew tap.
+# See docs: https://goreleaser.com
+version: 2
+
+project_name: statcounter
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: statcounter
+    main: .
+    binary: statcounter
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+# Publish a Homebrew cask (prebuilt binary) to a tap repo. Create a repo named
+# `homebrew-tap` under your GitHub account, and add a HOMEBREW_TAP_GITHUB_TOKEN
+# secret (a PAT with `contents: write` on that repo). Then:
+#   brew install czekaj/tap/statcounter
+# (Casks are macOS-only; Linux users can `go install` or download a tarball.)
+homebrew_casks:
+  - name: statcounter
+    repository:
+      owner: czekaj
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/czekaj/statcounter-cli"
+    description: "Agent-friendly CLI and MCP server for StatCounter web stats"
+    binaries:
+      - statcounter
+    # The binary is not notarized; strip the macOS quarantine flag on install.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/statcounter"]
+          end
